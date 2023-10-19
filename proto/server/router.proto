@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package cruiser.server;
+
+import "proto/providers/aws/lambda.proto";
+
+message Router {
+
+  message Handler {
+    oneof backend { cruiser.providers.aws.LambdaBackend aws_lambda = 1; }
+  }
+
+  message Route {
+
+    message MethodsRule {
+      enum Method {
+        GET = 0;
+        HEAD = 1;
+        POST = 2;
+        PUT = 3;
+        DELETE = 4;
+        CONNECT = 5;
+        OPTIONS = 6;
+        TRACE = 7;
+        PATCH = 8;
+      }
+      repeated Method methods = 1;
+    }
+
+    message SchemesRule {
+      enum Scheme {
+        HTTP = 0;
+        HTTPS = 1;
+      }
+      repeated Scheme schemes = 1;
+    }
+
+    message HeadersRule { map<string, string> headers = 1; }
+
+    message HeadersRegexpRule { map<string, string> headers_regexp = 1; }
+
+    message QueriesRule { map<string, string> queries = 1; }
+
+    message Matcher {
+      oneof rule {
+        bool is_grpc_call = 1;
+        string host = 2;
+        string path = 3;
+        string path_prefix = 4;
+        MethodsRule methods = 5;
+        SchemesRule schemes = 6;
+        HeadersRule headers = 7;
+        HeadersRegexpRule headers_regexp = 8;
+        QueriesRule queries = 9;
+      }
+    }
+
+    string name = 1;
+
+    string parent_name = 2;
+
+    repeated Matcher matchers = 3;
+
+    Handler handler = 4;
+  }
+
+  repeated Route routes = 1;
+}
