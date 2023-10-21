@@ -144,7 +144,7 @@ func grpcSendFrom(stream grpc.ServerStream, methodBackend GrpcMethodBackend) err
 
 		outgoingMetadata, payload, err := methodBackend.Response(ctx)
 
-		isEOF := err == io.EOF
+		isEOF := errors.Is(err, io.EOF)
 
 		if i == 0 && outgoingMetadata != nil {
 			if err := stream.SetHeader(outgoingMetadata); err != nil {

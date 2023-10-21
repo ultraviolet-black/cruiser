@@ -40,6 +40,7 @@ func WithHealthCheckParallelism(parallelism int) ProviderOption {
 type Provider interface {
 	GetLambdaClient() *awslambda.Client
 	GetS3Client() *awss3.Client
+	GetS3ClientWithRole(roleArn string) func() *awss3.Client
 	GetServiceDiscoveryClient() *awsservicediscovery.Client
 
 	HealthCheckHandlers(context.Context, ...*serverpb.Router_Handler)

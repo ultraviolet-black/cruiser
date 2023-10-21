@@ -18,7 +18,7 @@ type tfstateObject struct {
 }
 
 type tfstateSource struct {
-	s3Client *s3.Client
+	s3Client func() *s3.Client
 
 	bucket string
 
@@ -29,11 +29,13 @@ func (t *tfstateSource) GetTfstate(ctx context.Context) ([]*state.Tfstate, error
 
 	tfstates := []*state.Tfstate{}
 
-	paginator := s3.NewListObjectsV2Paginator(t.s3Client, &s3.ListObjectsV2Input{
+	s3Client := t.s3Client()
+
+	paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(t.bucket),
 	})
 
-	downloader := s3manager.NewDownloader(t.s3Client)
+	downloader := s3manager.NewDownloader(s3Client)
 
 	existingObjects := make(map[string]struct{})
 
@@ -52,7 +54,7 @@ func (t *tfstateSource) GetTfstate(ctx context.Context) ([]*state.Tfstate, error
 			continue
 		}
 
-		head, err := t.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+		head, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 			Bucket: aws.String(t.bucket),
 			Key:    object.Name,
 		})

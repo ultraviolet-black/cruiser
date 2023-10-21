@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -136,7 +137,7 @@ func (g *grpcMethodBackend) Request(ctx context.Context, payload []byte) error {
 
 	g.outgoingMetadata = metadata.Join(metadata.New(g.lambdaResponse.Headers), g.lambdaResponse.MultiValueHeaders)
 
-	return nil
+	return io.EOF
 
 }
 
@@ -147,7 +148,7 @@ func (g *grpcMethodBackend) Response(context.Context) (metadata.MD, []byte, erro
 	switch g.lambdaResponse.StatusCode {
 
 	case http.StatusOK:
-		return g.outgoingMetadata, g.responseBody, nil
+		return g.outgoingMetadata, g.responseBody, io.EOF
 
 	case http.StatusGone:
 		st = status.New(codes.OK, "moved permanently")

@@ -7,12 +7,16 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
 	serverpb "github.com/ultraviolet-black/cruiser/pkg/proto/server"
 
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	awsservicediscovery "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	awssts "github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ultraviolet-black/cruiser/pkg/providers/aws/lambda"
 	"github.com/ultraviolet-black/cruiser/pkg/server"
 )
@@ -26,6 +30,7 @@ type awsProvider struct {
 	lambdaClient           *awslambda.Client
 	s3Client               *awss3.Client
 	serviceDiscoveryClient *awsservicediscovery.Client
+	stsClient              *awssts.Client
 
 	healthCheckInterval    time.Duration
 	healthCheckCh          chan *serverpb.Router_Handler
@@ -42,6 +47,36 @@ func (p *awsProvider) GetLambdaClient() *awslambda.Client {
 
 func (p *awsProvider) GetS3Client() *awss3.Client {
 	return p.s3Client
+}
+
+func (p *awsProvider) GetS3ClientWithRole(roleArn string) func() *awss3.Client {
+
+	return func() *awss3.Client {
+
+		tempCredentials, err := p.stsClient.AssumeRole(context.TODO(), &sts.AssumeRoleInput{
+			RoleArn:         aws.String(roleArn),
+			RoleSessionName: aws.String("CruiserAssumedRole"),
+			DurationSeconds: aws.Int32(900),
+		})
+		if err != nil {
+			observability.Log.Panicw("error assuming role", "error", err, "roleArn", roleArn)
+		}
+
+		assumeRoleConfig, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				*tempCredentials.Credentials.AccessKeyId,
+				*tempCredentials.Credentials.SecretAccessKey,
+				*tempCredentials.Credentials.SessionToken),
+			),
+		)
+		if err != nil {
+			observability.Log.Panicw("error loading config", "error", err)
+		}
+
+		return awss3.NewFromConfig(assumeRoleConfig)
+
+	}
+
 }
 
 func (p *awsProvider) GetServiceDiscoveryClient() *awsservicediscovery.Client {

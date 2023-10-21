@@ -13,9 +13,9 @@ func WithTfstateBucket(bucketName string) TfstateSourceOption {
 	}
 }
 
-func WithS3Client(s3Client *s3.Client) TfstateSourceOption {
+func WithS3ClientFactory(s3ClientFactory func() *s3.Client) TfstateSourceOption {
 	return func(t *tfstateSource) {
-		t.s3Client = s3Client
+		t.s3Client = s3ClientFactory
 	}
 }
 

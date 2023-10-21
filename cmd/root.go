@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
@@ -45,6 +46,7 @@ var (
 	dynamodbEndpoint string
 	awsProvider      aws.Provider
 	awsTfstateBucket string
+	awsS3AssumeRole  string
 
 	healthCheckInterval    time.Duration
 	healthCheckParallelism = 4
@@ -101,8 +103,16 @@ var (
 					return ErrEmptyAwsTfstateBucket
 				}
 
+				s3ClientFactory := func() *awss3.Client {
+					return awsProvider.GetS3Client()
+				}
+
+				if len(awsS3AssumeRole) > 0 {
+					s3ClientFactory = awsProvider.GetS3ClientWithRole(awsS3AssumeRole)
+				}
+
 				tfstateSource = s3.NewTfstateSource(
-					s3.WithS3Client(awsProvider.GetS3Client()),
+					s3.WithS3ClientFactory(s3ClientFactory),
 					s3.WithTfstateBucket(awsTfstateBucket),
 				)
 
@@ -157,6 +167,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&awsTfstateBucket, "aws-tfstate-bucket", "", "AWS tfstate bucket")
 	rootCmd.PersistentFlags().DurationVar(&healthCheckInterval, "health-check-interval", 0, "health check interval (0 to disable)")
 	rootCmd.PersistentFlags().IntVar(&healthCheckParallelism, "health-check-parallelism", 4, "health check parallelism")
+	rootCmd.PersistentFlags().StringVar(&awsS3AssumeRole, "aws-s3-assume-role", "", "AWS S3 assume role")
 
 	viper.BindPFlag("enable_tls", rootCmd.PersistentFlags().Lookup("enable-tls"))
 	viper.BindPFlag("tls_certificate", rootCmd.PersistentFlags().Lookup("tls-certificate"))
@@ -170,6 +181,7 @@ func init() {
 	viper.BindPFlag("aws_tfstate_bucket", rootCmd.PersistentFlags().Lookup("aws-tfstate-bucket"))
 	viper.BindPFlag("health_check_interval", rootCmd.PersistentFlags().Lookup("health-check-interval"))
 	viper.BindPFlag("health_check_parallelism", rootCmd.PersistentFlags().Lookup("health-check-parallelism"))
+	viper.BindPFlag("aws_s3_assume_role", rootCmd.PersistentFlags().Lookup("aws-s3-assume-role"))
 
 	initRouter()
 
