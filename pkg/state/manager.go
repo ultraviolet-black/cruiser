@@ -2,20 +2,25 @@ package state
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
+type Manager interface {
+	ReadFromTfstate(*Tfstate) error
+	Build() error
+}
+
 type state struct {
-	xds    *xdsState
-	routes *routesState
+	managers []Manager
 
 	tfstateSource TfstateSource
 
 	periodicSyncInterval time.Duration
 
-	errCh          chan error
-	updateXdsCh    chan XdsState
-	updateRoutesCh chan RoutesState
+	errCh chan error
+
+	wg *sync.WaitGroup
 }
 
 func (s *state) periodicSync(ctx context.Context) {
@@ -28,43 +33,31 @@ func (s *state) periodicSync(ctx context.Context) {
 			return
 		}
 
-		if tfstates != nil {
+		for _, m := range s.managers {
 
-			if s.routes != nil {
+			s.wg.Add(1)
+
+			go func(manager Manager) {
 
 				for _, tfstate := range tfstates {
-					if err := readRoutesFromTfstate(tfstate, s.routes); err != nil {
+					if err := manager.ReadFromTfstate(tfstate); err != nil {
 						s.errCh <- err
 						return
 					}
 				}
 
-				if err := s.routes.build(); err != nil {
+				if err := manager.Build(); err != nil {
 					s.errCh <- err
 					return
 				}
 
-				s.updateRoutesCh <- s.routes
-			}
+				s.wg.Done()
 
-			if s.xds != nil {
-
-				for _, tfstate := range tfstates {
-					if err := readXdsFromTfstate(tfstate, s.xds); err != nil {
-						s.errCh <- err
-						return
-					}
-				}
-
-				if err := s.xds.build(); err != nil {
-					s.errCh <- err
-					return
-				}
-
-				s.updateXdsCh <- s.xds
-			}
+			}(m)
 
 		}
+
+		s.wg.Wait()
 
 		select {
 
@@ -88,22 +81,6 @@ func (s *state) Start(ctx context.Context) {
 
 }
 
-func (s *state) RoutesState() RoutesState {
-	return s.routes
-}
-
-func (s *state) XdsState() XdsState {
-	return s.xds
-}
-
 func (s *state) ErrorCh() <-chan error {
 	return s.errCh
-}
-
-func (s *state) UpdateRoutesCh() <-chan RoutesState {
-	return s.updateRoutesCh
-}
-
-func (s *state) UpdateXdsCh() <-chan XdsState {
-	return s.updateXdsCh
 }

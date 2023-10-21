@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
 	"time"
@@ -109,13 +110,15 @@ func WithBackendProvider(provider BackendProvider) RouterOption {
 
 type Router interface {
 	http.Handler
+	DoHealthcheck(context.Context)
 }
 
 func NewRouter(options ...RouterOption) Router {
 
 	r := &router{
-		rtr:   mux.NewRouter(),
-		provs: make(map[BackendProviderKey]BackendProvider),
+		rtr:      mux.NewRouter(),
+		provs:    make(map[BackendProviderKey]BackendProvider),
+		handlers: []*serverpb.Router_Handler{},
 	}
 
 	for _, option := range options {

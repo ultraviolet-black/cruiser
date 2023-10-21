@@ -42,6 +42,9 @@ import (
 type XdsState interface {
 	Register(context.Context, *grpc.Server)
 	SetClusterEndpoints([]*endpointv3.ClusterLoadAssignment)
+	UpdateCh() <-chan XdsState
+	ReadFromTfstate(*Tfstate) error
+	Build() error
 }
 
 type xdsState struct {
@@ -66,9 +69,15 @@ type xdsState struct {
 	clusterLoadAssignmentCache *cache.LinearCache
 
 	rwLock *sync.RWMutex
+
+	updateCh chan XdsState
 }
 
-func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
+func (xs *xdsState) UpdateCh() <-chan XdsState {
+	return xs.updateCh
+}
+
+func (xs *xdsState) ReadFromTfstate(tfstate *Tfstate) error {
 
 	for _, resource := range tfstate.Resources {
 
@@ -80,7 +89,7 @@ func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
 
 				listener := &listenerv3.Listener{}
 
-				if err := protojson.Unmarshal(instance, listener); err != nil {
+				if err := protojson.Unmarshal([]byte(instance.ProtoJson), listener); err != nil {
 					return err
 				}
 
@@ -92,7 +101,7 @@ func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
 
 				virtualHost := &routev3.VirtualHost{}
 
-				if err := protojson.Unmarshal(instance, virtualHost); err != nil {
+				if err := protojson.Unmarshal([]byte(instance.ProtoJson), virtualHost); err != nil {
 					return err
 				}
 
@@ -104,7 +113,7 @@ func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
 
 				cluster := &clusterv3.Cluster{}
 
-				if err := protojson.Unmarshal(instance, cluster); err != nil {
+				if err := protojson.Unmarshal([]byte(instance.ProtoJson), cluster); err != nil {
 					return err
 				}
 
@@ -116,7 +125,7 @@ func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
 
 				routeConfiguration := &routev3.RouteConfiguration{}
 
-				if err := protojson.Unmarshal(instance, routeConfiguration); err != nil {
+				if err := protojson.Unmarshal([]byte(instance.ProtoJson), routeConfiguration); err != nil {
 					return err
 				}
 
@@ -128,7 +137,7 @@ func readXdsFromTfstate(tfstate *Tfstate, xs *xdsState) error {
 
 				clusterLoadAssignment := &endpointv3.ClusterLoadAssignment{}
 
-				if err := protojson.Unmarshal(instance, clusterLoadAssignment); err != nil {
+				if err := protojson.Unmarshal([]byte(instance.ProtoJson), clusterLoadAssignment); err != nil {
 					return err
 				}
 
@@ -174,7 +183,7 @@ func transactXdsResource[T types.Resource](cache *cache.LinearCache, toUpdate ma
 
 }
 
-func (xs *xdsState) build() error {
+func (xs *xdsState) Build() error {
 
 	xs.rwLock.Lock()
 	defer xs.rwLock.Unlock()
@@ -210,6 +219,8 @@ func (xs *xdsState) build() error {
 	xs.routeConfigurationsMap = make(map[string]*routev3.RouteConfiguration)
 	xs.clustersMap = make(map[string]*clusterv3.Cluster)
 	xs.clusterLoadAssignmentsMap = make(map[string]*endpointv3.ClusterLoadAssignment)
+
+	xs.updateCh <- xs
 
 	return nil
 

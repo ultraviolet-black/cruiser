@@ -16,43 +16,42 @@ import (
 
 type StateManagerOption func(*state)
 
-func WithXdsState() StateManagerOption {
-	return func(s *state) {
-		s.xds = &xdsState{
-			listenersMap:              make(map[string]*listenerv3.Listener),
-			virtualHostsMap:           make(map[string]*routev3.VirtualHost),
-			routeConfigurationsMap:    make(map[string]*routev3.RouteConfiguration),
-			clustersMap:               make(map[string]*clusterv3.Cluster),
-			clusterLoadAssignmentsMap: make(map[string]*endpointv3.ClusterLoadAssignment),
+func NewXdsState() XdsState {
+	return &xdsState{
+		listenersMap:              make(map[string]*listenerv3.Listener),
+		virtualHostsMap:           make(map[string]*routev3.VirtualHost),
+		routeConfigurationsMap:    make(map[string]*routev3.RouteConfiguration),
+		clustersMap:               make(map[string]*clusterv3.Cluster),
+		clusterLoadAssignmentsMap: make(map[string]*endpointv3.ClusterLoadAssignment),
 
-			endpointsMap: make(map[string][]*endpointv3.LocalityLbEndpoints),
+		endpointsMap: make(map[string][]*endpointv3.LocalityLbEndpoints),
 
-			listenersToDelete:              make(map[string]*listenerv3.Listener),
-			virtualHostsToDelete:           make(map[string]*routev3.VirtualHost),
-			routeConfigurationsToDelete:    make(map[string]*routev3.RouteConfiguration),
-			clustersToDelete:               make(map[string]*clusterv3.Cluster),
-			clusterLoadAssignmentsToDelete: make(map[string]*endpointv3.ClusterLoadAssignment),
+		listenersToDelete:              make(map[string]*listenerv3.Listener),
+		virtualHostsToDelete:           make(map[string]*routev3.VirtualHost),
+		routeConfigurationsToDelete:    make(map[string]*routev3.RouteConfiguration),
+		clustersToDelete:               make(map[string]*clusterv3.Cluster),
+		clusterLoadAssignmentsToDelete: make(map[string]*endpointv3.ClusterLoadAssignment),
 
-			listenerCache:              cache.NewLinearCache(resource.ListenerType),
-			virtualHostCache:           cache.NewLinearCache(resource.VirtualHostType),
-			routeConfigurationCache:    cache.NewLinearCache(resource.RouteType),
-			clusterCache:               cache.NewLinearCache(resource.ClusterType),
-			clusterLoadAssignmentCache: cache.NewLinearCache(resource.EndpointType),
+		listenerCache:              cache.NewLinearCache(resource.ListenerType),
+		virtualHostCache:           cache.NewLinearCache(resource.VirtualHostType),
+		routeConfigurationCache:    cache.NewLinearCache(resource.RouteType),
+		clusterCache:               cache.NewLinearCache(resource.ClusterType),
+		clusterLoadAssignmentCache: cache.NewLinearCache(resource.EndpointType),
 
-			rwLock: new(sync.RWMutex),
-		}
+		rwLock: new(sync.RWMutex),
+
+		updateCh: make(chan XdsState),
 	}
 }
 
-func WithRoutesState() StateManagerOption {
-	return func(s *state) {
-		s.routes = &routesState{
-			routes: NewGraph(func(r *serverpb.Router_Route) string {
-				return r.Name
-			}),
-			routesMap: make(map[string]*serverpb.Router_Route),
-			rwLock:    new(sync.RWMutex),
-		}
+func NewRoutesState() RoutesState {
+	return &routesState{
+		routes: NewGraph(func(r *serverpb.Router_Route) string {
+			return r.Name
+		}),
+		routesMap: make(map[string]*serverpb.Router_Route),
+		rwLock:    new(sync.RWMutex),
+		updateCh:  make(chan RoutesState),
 	}
 }
 
@@ -68,23 +67,23 @@ func WithTfstateSource(tfstateSource TfstateSource) StateManagerOption {
 	}
 }
 
+func WithManagers(managers ...Manager) StateManagerOption {
+	return func(s *state) {
+		s.managers = append(s.managers, managers...)
+	}
+}
+
 type StateManager interface {
 	Start(context.Context)
-
-	RoutesState() RoutesState
-	XdsState() XdsState
-
 	ErrorCh() <-chan error
-	UpdateRoutesCh() <-chan RoutesState
-	UpdateXdsCh() <-chan XdsState
 }
 
 func NewStateManager(opts ...StateManagerOption) StateManager {
 	s := &state{
+		managers:             []Manager{},
 		periodicSyncInterval: 5 * time.Second,
 		errCh:                make(chan error),
-		updateXdsCh:          make(chan XdsState),
-		updateRoutesCh:       make(chan RoutesState),
+		wg:                   new(sync.WaitGroup),
 	}
 
 	for _, opt := range opts {

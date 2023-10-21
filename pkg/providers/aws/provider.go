@@ -1,7 +1,10 @@
 package aws
 
 import (
+	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
@@ -24,6 +27,12 @@ type awsProvider struct {
 	s3Client               *awss3.Client
 	serviceDiscoveryClient *awsservicediscovery.Client
 
+	healthCheckInterval    time.Duration
+	healthCheckCh          chan *serverpb.Router_Handler
+	stopHealthCheckCh      chan struct{}
+	healthCheckParallelism int
+	healthCheckWg          *sync.WaitGroup
+
 	dynamodbEndpoint string
 }
 
@@ -41,6 +50,57 @@ func (p *awsProvider) GetServiceDiscoveryClient() *awsservicediscovery.Client {
 
 func (p *awsProvider) BackendProviderKey() server.BackendProviderKey {
 	return server.AWSBackendProvider
+}
+
+func (p *awsProvider) doHealthCheck(ctx context.Context) {
+
+	h := <-p.healthCheckCh
+
+	switch backend := h.Backend.(type) {
+
+	case *serverpb.Router_Handler_AwsLambda:
+		lambda.DoHealthcheck(ctx, p.lambdaClient, backend.AwsLambda)
+
+	}
+
+	p.healthCheckWg.Done()
+
+}
+
+func (p *awsProvider) HealthCheckHandlers(ctx context.Context, handlers ...*serverpb.Router_Handler) {
+
+	if len(handlers) == 0 || p.healthCheckInterval == 0 {
+		return
+	}
+
+	if p.stopHealthCheckCh != nil {
+		p.stopHealthCheckCh <- struct{}{}
+	} else {
+		p.stopHealthCheckCh = make(chan struct{})
+	}
+
+	go func() {
+
+		for _, h := range handlers {
+			p.healthCheckCh <- h
+			p.healthCheckWg.Add(1)
+			go p.doHealthCheck(ctx)
+		}
+
+		p.healthCheckWg.Wait()
+
+		select {
+		case <-p.stopHealthCheckCh:
+			return
+
+		case <-ctx.Done():
+			return
+
+		case <-time.After(p.healthCheckInterval):
+
+		}
+	}()
+
 }
 
 func (p *awsProvider) ToGrpcBackend(h *serverpb.Router_Handler) http.Handler {

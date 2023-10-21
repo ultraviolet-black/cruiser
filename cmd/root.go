@@ -46,6 +46,9 @@ var (
 	awsProvider      aws.Provider
 	awsTfstateBucket string
 
+	healthCheckInterval    time.Duration
+	healthCheckParallelism = 4
+
 	listenerProtocol server.ListenerProtocol = server.H2C
 
 	stateManager state.StateManager
@@ -84,6 +87,8 @@ var (
 
 			awsProvider = aws.NewProvider(
 				aws.WithDynamoDBEndpoint(dynamodbEndpoint),
+				aws.WithHealthCheckInterval(healthCheckInterval),
+				aws.WithHealthCheckParallelism(healthCheckParallelism),
 			)
 
 			backendProviders = append(backendProviders, awsProvider)
@@ -150,6 +155,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&tfstateSourceSelector, "tfstate-source", "", "tfstate source, valid values: aws-s3")
 	rootCmd.PersistentFlags().StringVar(&dynamodbEndpoint, "dynamodb-endpoint", "", "DynamoDB endpoint")
 	rootCmd.PersistentFlags().StringVar(&awsTfstateBucket, "aws-tfstate-bucket", "", "AWS tfstate bucket")
+	rootCmd.PersistentFlags().DurationVar(&healthCheckInterval, "health-check-interval", 0, "health check interval (0 to disable)")
+	rootCmd.PersistentFlags().IntVar(&healthCheckParallelism, "health-check-parallelism", 4, "health check parallelism")
 
 	viper.BindPFlag("enable_tls", rootCmd.PersistentFlags().Lookup("enable-tls"))
 	viper.BindPFlag("tls_certificate", rootCmd.PersistentFlags().Lookup("tls-certificate"))
@@ -161,6 +168,8 @@ func init() {
 	viper.BindPFlag("tfstate_source", rootCmd.PersistentFlags().Lookup("tfstate-source"))
 	viper.BindPFlag("dynamodb_endpoint", rootCmd.PersistentFlags().Lookup("dynamodb-endpoint"))
 	viper.BindPFlag("aws_tfstate_bucket", rootCmd.PersistentFlags().Lookup("aws-tfstate-bucket"))
+	viper.BindPFlag("health_check_interval", rootCmd.PersistentFlags().Lookup("health-check-interval"))
+	viper.BindPFlag("health_check_parallelism", rootCmd.PersistentFlags().Lookup("health-check-parallelism"))
 
 	initRouter()
 

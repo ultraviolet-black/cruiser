@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -16,13 +17,15 @@ const (
 
 type BackendProvider interface {
 	BackendProviderKey() BackendProviderKey
+	HealthCheckHandlers(context.Context, ...*serverpb.Router_Handler)
 	ToGrpcBackend(*serverpb.Router_Handler) http.Handler
 	ToHttpBackend(*serverpb.Router_Handler) http.Handler
 }
 
 type router struct {
-	rtr   *mux.Router
-	provs map[BackendProviderKey]BackendProvider
+	rtr      *mux.Router
+	provs    map[BackendProviderKey]BackendProvider
+	handlers []*serverpb.Router_Handler
 }
 
 func (r *router) parseProtoRouterConfig(routerConfig *serverpb.Router) error {
@@ -132,6 +135,8 @@ func (r *router) parseProtoRoute(route *serverpb.Router_Route) error {
 
 	var provKey BackendProviderKey
 
+	r.handlers = append(r.handlers, route.Handler)
+
 	switch route.Handler.Backend.(type) {
 
 	case *serverpb.Router_Handler_AwsLambda:
@@ -155,6 +160,14 @@ func (r *router) parseProtoRoute(route *serverpb.Router_Route) error {
 	rt.Handler(prov.ToHttpBackend(route.Handler))
 
 	return nil
+
+}
+
+func (r *router) DoHealthcheck(ctx context.Context) {
+
+	for _, prov := range r.provs {
+		prov.HealthCheckHandlers(ctx, r.handlers...)
+	}
 
 }
 

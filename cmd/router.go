@@ -22,6 +22,8 @@ var (
 
 	routerHandler server.SwapHandler
 
+	routesState state.RoutesState
+
 	routerCmd = &cobra.Command{
 		Use:   "router",
 		Short: "Router is a proxy server for serverless endpoints",
@@ -44,38 +46,13 @@ var (
 				server.WithTLSConfig(tlsContext),
 			)
 
+			routesState = state.NewRoutesState()
+
 			stateManager = state.NewStateManager(
 				state.WithTfstateSource(tfstateSource),
 				state.WithPeriodicSyncInterval(periodSyncInterval),
-				state.WithRoutesState(),
+				state.WithManagers(routesState),
 			)
-
-			if len(awsServiceDiscoveryNamespaces) > 0 {
-
-				awsServiceDiscoveryXds = servicediscovery.NewXds(
-					servicediscovery.WithNamespacesNames(awsServiceDiscoveryNamespaces...),
-					servicediscovery.WithServicePortTagKey(awsServicePortTagKey),
-					servicediscovery.WithPeriodicSyncInterval(periodSyncInterval),
-					servicediscovery.WithServiceDiscoveryClient(awsProvider.GetServiceDiscoveryClient()),
-					servicediscovery.WithXdsState(stateManager.XdsState()),
-				)
-
-				go func() {
-
-					select {
-					case err := <-awsServiceDiscoveryXds.ErrorCh():
-
-						observability.Log.Error("aws service discovery error:", "error", err)
-
-						signalCh <- os.Kill
-						return
-					}
-
-				}()
-
-				awsServiceDiscoveryXds.Start(cmd.Context())
-
-			}
 
 			return nil
 
@@ -112,7 +89,7 @@ var (
 						signalCh <- os.Kill
 						return
 
-					case routesState := <-stateManager.UpdateRoutesCh():
+					case routesState := <-routesState.UpdateCh():
 
 						observability.Log.Debug("routes update received")
 
@@ -133,6 +110,8 @@ var (
 								server.WithRouterConfig(routerConfig),
 							)...,
 						)
+
+						router.DoHealthcheck(cmd.Context())
 
 						routerHandler.Swap(router)
 

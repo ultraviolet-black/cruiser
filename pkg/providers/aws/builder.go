@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -23,10 +25,24 @@ func WithDynamoDBEndpoint(endpoint string) ProviderOption {
 	}
 }
 
+func WithHealthCheckInterval(interval time.Duration) ProviderOption {
+	return func(p *awsProvider) {
+		p.healthCheckInterval = interval
+	}
+}
+
+func WithHealthCheckParallelism(parallelism int) ProviderOption {
+	return func(p *awsProvider) {
+		p.healthCheckParallelism = parallelism
+	}
+}
+
 type Provider interface {
 	GetLambdaClient() *awslambda.Client
 	GetS3Client() *awss3.Client
 	GetServiceDiscoveryClient() *awsservicediscovery.Client
+
+	HealthCheckHandlers(context.Context, ...*serverpb.Router_Handler)
 
 	BackendProviderKey() server.BackendProviderKey
 	ToGrpcBackend(*serverpb.Router_Handler) http.Handler
@@ -36,8 +52,11 @@ type Provider interface {
 func NewProvider(opts ...ProviderOption) Provider {
 
 	p := &awsProvider{
-		grpcHandlers: make(map[string]server.GrpcHandler),
-		httpHandlers: make(map[string]http.Handler),
+		grpcHandlers:           make(map[string]server.GrpcHandler),
+		httpHandlers:           make(map[string]http.Handler),
+		healthCheckInterval:    0,
+		healthCheckParallelism: 4,
+		healthCheckWg:          &sync.WaitGroup{},
 	}
 
 	for _, opt := range opts {
@@ -63,6 +82,8 @@ func NewProvider(opts ...ProviderOption) Provider {
 	if err != nil {
 		observability.Log.Panic(err.Error())
 	}
+
+	p.healthCheckCh = make(chan *serverpb.Router_Handler, p.healthCheckParallelism)
 
 	p.config = cfg
 	p.lambdaClient = awslambda.NewFromConfig(cfg)

@@ -9,6 +9,9 @@ import (
 
 type RoutesState interface {
 	GetRoutes() ([]*serverpb.Router_Route, error)
+	UpdateCh() <-chan RoutesState
+	ReadFromTfstate(*Tfstate) error
+	Build() error
 }
 
 type routesState struct {
@@ -16,9 +19,15 @@ type routesState struct {
 	routesMap map[string]*serverpb.Router_Route
 
 	rwLock *sync.RWMutex
+
+	updateCh chan RoutesState
 }
 
-func readRoutesFromTfstate(tfstate *Tfstate, rs *routesState) error {
+func (r *routesState) UpdateCh() <-chan RoutesState {
+	return r.updateCh
+}
+
+func (r *routesState) ReadFromTfstate(tfstate *Tfstate) error {
 
 	for _, resource := range tfstate.Resources {
 
@@ -30,11 +39,11 @@ func readRoutesFromTfstate(tfstate *Tfstate, rs *routesState) error {
 
 			route := &serverpb.Router_Route{}
 
-			if err := protojson.Unmarshal(instance, route); err != nil {
+			if err := protojson.Unmarshal([]byte(instance.ProtoJson), route); err != nil {
 				return err
 			}
 
-			rs.routesMap[route.Name] = route
+			r.routesMap[route.Name] = route
 
 		}
 
@@ -44,7 +53,7 @@ func readRoutesFromTfstate(tfstate *Tfstate, rs *routesState) error {
 
 }
 
-func (r *routesState) build() error {
+func (r *routesState) Build() error {
 
 	r.rwLock.Lock()
 	defer r.rwLock.Unlock()
@@ -66,6 +75,8 @@ func (r *routesState) build() error {
 	}
 
 	r.routesMap = make(map[string]*serverpb.Router_Route)
+
+	r.updateCh <- r
 
 	return nil
 
