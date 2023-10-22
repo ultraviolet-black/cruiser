@@ -4,20 +4,13 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
 	serverpb "github.com/ultraviolet-black/cruiser/pkg/proto/server"
-	servicediscovery "github.com/ultraviolet-black/cruiser/pkg/providers/aws/service_discovery"
 	"github.com/ultraviolet-black/cruiser/pkg/server"
 	"github.com/ultraviolet-black/cruiser/pkg/state"
 )
 
 var (
-	awsServiceDiscoveryNamespaces []string
-	awsServicePortTagKey          string
-
-	awsServiceDiscoveryXds servicediscovery.Xds
-
 	routerServer server.Server
 
 	routerHandler server.SwapHandler
@@ -137,13 +130,3 @@ var (
 		},
 	}
 )
-
-func initRouter() {
-
-	routerCmd.PersistentFlags().StringVar(&awsServicePortTagKey, "aws-service-port-tag-key", "port", "AWS service port tag key")
-	routerCmd.PersistentFlags().StringSliceVar(&awsServiceDiscoveryNamespaces, "aws-service-discovery-namespaces", []string{}, "AWS service discovery namespaces")
-
-	viper.BindPFlag("aws_service_discovery_namespaces", rootCmd.PersistentFlags().Lookup("aws-service-discovery-namespaces"))
-	viper.BindPFlag("aws_service_port_tag_key", rootCmd.PersistentFlags().Lookup("aws-service-port-tag-key"))
-
-}

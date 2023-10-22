@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
 	servicediscovery "github.com/ultraviolet-black/cruiser/pkg/providers/aws/service_discovery"
 	"github.com/ultraviolet-black/cruiser/pkg/server"
@@ -12,6 +13,11 @@ import (
 )
 
 var (
+	awsServiceDiscoveryNamespaces []string
+	awsServicePortTagKey          string
+
+	awsServiceDiscoveryXds servicediscovery.Xds
+
 	xdsGrpcServer *grpc.Server
 	xdsServer     server.Server
 
@@ -129,3 +135,13 @@ var (
 		},
 	}
 )
+
+func initXds() {
+
+	xdsCmd.PersistentFlags().StringVar(&awsServicePortTagKey, "aws-service-port-tag-key", "port", "AWS service port tag key")
+	xdsCmd.PersistentFlags().StringSliceVar(&awsServiceDiscoveryNamespaces, "aws-service-discovery-namespaces", []string{}, "AWS service discovery namespaces")
+
+	viper.BindPFlag("aws_service_discovery_namespaces", rootCmd.PersistentFlags().Lookup("aws-service-discovery-namespaces"))
+	viper.BindPFlag("aws_service_port_tag_key", rootCmd.PersistentFlags().Lookup("aws-service-port-tag-key"))
+
+}

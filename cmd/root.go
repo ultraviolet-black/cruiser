@@ -183,7 +183,7 @@ func init() {
 	viper.BindPFlag("health_check_parallelism", rootCmd.PersistentFlags().Lookup("health-check-parallelism"))
 	viper.BindPFlag("aws_s3_assume_role", rootCmd.PersistentFlags().Lookup("aws-s3-assume-role"))
 
-	initRouter()
+	initXds()
 
 	routerCmd.AddCommand(routerStartCmd)
 	rootCmd.AddCommand(routerCmd)
