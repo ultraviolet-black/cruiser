@@ -64,7 +64,7 @@ var (
 
 				listenerProtocol = server.HTTP2
 
-				if len(certFile) == 0 || len(keyFile) == 0 {
+				if len(certFile) != 0 && len(keyFile) != 0 {
 					tlsCtx, err := tls.FromFile(
 						tls.FromFileWithCertificate(certFile, keyFile),
 						tls.FromFileWithInsecureSkipVerify(tlsInsecureSkipVerify),
@@ -207,6 +207,8 @@ func initConfig() {
 	}
 
 	viper.AutomaticEnv()
+
+	observability.InitializeLog()
 
 	if err := viper.ReadInConfig(); err == nil {
 		observability.Log.Info("Using config file:", viper.ConfigFileUsed())

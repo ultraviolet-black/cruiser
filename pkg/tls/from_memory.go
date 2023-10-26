@@ -6,9 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"log"
 	"math/big"
 	"time"
+
+	"github.com/ultraviolet-black/cruiser/pkg/observability"
 )
 
 type fromMemory struct {
@@ -65,14 +66,14 @@ func FromMemory(opts ...FromMemoryOption) (TlsContext, error) {
 		return nil, err
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, caCert, caCert, priv.PublicKey, priv)
+	certBytes, err := x509.CreateCertificate(rand.Reader, caCert, caCert, &priv.PublicKey, priv)
 	if err != nil {
-		log.Panic("Error self signing certificate", "error", err)
+		observability.Log.Panicw("Error self signing certificate", "error", err)
 	}
 
 	selfSignedCert, err := x509.ParseCertificate(certBytes)
 	if err != nil {
-		log.Panic("Error parsing self signed certificate", "error", err)
+		observability.Log.Panicw("Error parsing self signed certificate", "error", err)
 	}
 
 	cert := tls.Certificate{
