@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
 	"github.com/ultraviolet-black/cruiser/pkg/providers/aws"
@@ -208,9 +210,50 @@ func initConfig() {
 
 	viper.AutomaticEnv()
 
+	keys := viper.AllKeys()
+
+	for _, key := range keys {
+
+		envName := strings.ToUpper(key)
+
+		viper.BindEnv(key, envName)
+
+	}
+
 	observability.InitializeLog()
 
 	if err := viper.ReadInConfig(); err == nil {
 		observability.Log.Info("Using config file:", viper.ConfigFileUsed())
 	}
+
+	postInitCommands([]*cobra.Command{rootCmd})
+
+}
+
+func postInitCommands(commands []*cobra.Command) {
+	for _, cmd := range commands {
+		presetRequiredFlags(cmd)
+		if cmd.HasSubCommands() {
+			postInitCommands(cmd.Commands())
+		}
+	}
+}
+
+func presetRequiredFlags(cmd *cobra.Command) {
+	viper.BindPFlags(cmd.Flags())
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+
+		name := strings.ReplaceAll(f.Name, "-", "_")
+
+		if viper.IsSet(name) {
+
+			val := viper.GetString(name)
+
+			if val != "" {
+				cmd.Flags().Set(f.Name, val)
+			}
+
+		}
+
+	})
 }
