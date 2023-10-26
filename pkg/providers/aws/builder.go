@@ -12,6 +12,7 @@ import (
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	awsservicediscovery "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	awssts "github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ultraviolet-black/cruiser/pkg/observability"
 	serverpb "github.com/ultraviolet-black/cruiser/pkg/proto/server"
 	"github.com/ultraviolet-black/cruiser/pkg/server"
@@ -87,6 +88,7 @@ func NewProvider(opts ...ProviderOption) Provider {
 	p.healthCheckCh = make(chan *serverpb.Router_Handler, p.healthCheckParallelism)
 
 	p.config = cfg
+	p.stsClient = awssts.NewFromConfig(cfg)
 	p.lambdaClient = awslambda.NewFromConfig(cfg)
 	p.s3Client = awss3.NewFromConfig(cfg)
 	p.serviceDiscoveryClient = awsservicediscovery.NewFromConfig(cfg)
